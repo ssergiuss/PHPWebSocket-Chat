@@ -5,10 +5,22 @@ set_time_limit(0);
 // include the web sockets server script (the server is started at the far bottom of this file)
 require 'class.PHPWebSocket.php';
 
+$Authenticated = array();
+
+function isAuthenticated($clientID) {
+	return $Authenticated[$clientID] == 3;
+}
+
+function authenticate($clientID, $message) {
+	//Todo...
+}
+
 // when a client sends data to the server
 function wsOnMessage($clientID, $message, $messageLength, $binary) {
 	global $Server;
-	$ip = long2ip( $Server->wsClients[$clientID][6] );
+	global $Authenticated;
+
+	$ip = long2ip($Server->wsClients[$clientID][6]);
 
 	// check if message length is 0
 	if ($messageLength == 0) {
@@ -16,14 +28,18 @@ function wsOnMessage($clientID, $message, $messageLength, $binary) {
 		return;
 	}
 
-	//The speaker is the only person in the room. Don't let them feel lonely.
-	if ( sizeof($Server->wsClients) == 1 )
-		$Server->wsSend($clientID, "There isn't anyone else in the room, but I'll still listen to you. --Your Trusty Server");
-	else
-		//Send the message to everyone but the person who said it
-		foreach ( $Server->wsClients as $id => $client )
-			if ( $id != $clientID )
-				$Server->wsSend($id, "Visitor $clientID ($ip) said \"$message\"");
+	if (!isAuthenticated($clientID)) {
+		authenticate($clientID, $message);
+	} else {
+		//The speaker is the only person in the room. Don't let them feel lonely.
+		if ( sizeof($Server->wsClients) == 1 )
+			$Server->wsSend($clientID, "There isn't anyone else in the room, but I'll still listen to you. --Your Trusty Server");
+		else
+			//Send the message to everyone but the person who said it
+			foreach ( $Server->wsClients as $id => $client )
+				if ( $id != $clientID )
+					$Server->wsSend($id, "Visitor $clientID ($ip) said \"$message\"");
+	}
 }
 
 // when a client connects
@@ -43,6 +59,10 @@ function wsOnOpen($clientID)
 // when a client closes or lost connection
 function wsOnClose($clientID, $status) {
 	global $Server;
+	global $Authenticated;
+
+	unset($Authenticated[$clientID]);
+
 	$ip = long2ip( $Server->wsClients[$clientID][6] );
 
 	$Server->log( "$ip ($clientID) has disconnected." );
