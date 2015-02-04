@@ -64,7 +64,8 @@ vector<long long> buildV() {
     vector<long long> v;
 
     for (unsigned i = 0; i < s.size(); i++) {
-        v.push_back((1LL * (rand() % 2 ? -1 : 1) * s[i] * s[i]) % n);
+        // v.push_back((1LL * (rand() % 2 ? -1 : 1) * s[i] * s[i]) % n);
+        v.push_back((s[i] * s[i]) % n);
     }
 
     return v;
