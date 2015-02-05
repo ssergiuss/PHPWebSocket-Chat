@@ -116,6 +116,10 @@ $(document).ready(function () {
     Server = new FancyWebSocket('ws://127.0.0.1:9300');
 
     $('#message').keypress(function (e) {
+        if (e.keyCode == 13) {
+            e.preventDefault();
+        }
+
         if (isAuthenticated() && e.keyCode == 13 && this.value) {
             log('You: ' + this.value);
             send(this.value);
