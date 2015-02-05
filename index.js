@@ -90,7 +90,7 @@ function authenticate(message) {
         Authentication.status = 2;
     } else if (2 === Authentication.status) {
         Authentication.status = 3;
-        log('Authenticated.');
+        log('Authenticated as "' + Authentication.username + '".');
 
         $('#message').show();
         $('#disconnect').show();
