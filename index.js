@@ -94,6 +94,7 @@ function authenticate(message) {
         log('Authenticated.');
 
         $('#message').show();
+        $('#disconnect').show();
     }
 }
 
@@ -150,6 +151,20 @@ $(document).ready(function () {
         }
     });
 
+    $('#disconnect').click(function (e) {
+        e.preventDefault();
+
+        if (isAuthenticated()) {
+            Server.disconnect();
+        }
+    });
+
+    $('#connect').click(function (e) {
+        e.preventDefault();
+
+        location.reload();
+    });
+
     Server.bind('open', function () {
         log('Connected.');
         log('Authenticating...');
@@ -158,7 +173,11 @@ $(document).ready(function () {
     });
 
     Server.bind('close', function (data) {
-        console.log(data);
+        Authentication = {};
+
+        $('#message').hide();
+        $('#disconnect').hide();
+        $('#connect').show();
 
         log('Disconnected.');
     });

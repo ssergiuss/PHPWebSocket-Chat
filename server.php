@@ -179,7 +179,7 @@ function wsOnMessage($clientID, $message, $messageLength, $binary)
 		} else {
 			foreach ($Server->wsClients as $id => $client) {
 				if ($id != $clientID) {
-					$Server->wsSend($id, "$username ($ip) said \"$message\"");
+					$Server->wsSend($id, "$username ($ip): $message");
 				}
 			}
 		}
@@ -200,17 +200,18 @@ function wsOnClose($clientID, $status)
 	global $Authentication;
 
 	$ip = long2ip($Server->wsClients[$clientID][6]);
-	$username = $Authentication[$clientID]['username'];
-
-	unset($Authentication[$clientID]);
 
 	$Server->log("$ip ($clientID) has disconnected.");
 
 	if (isAuthenticated($clientID)) {
+		$username = $Authentication[$clientID]['username'];
+
 		foreach ($Server->wsClients as $id => $client) {
 			$Server->wsSend($id, "$username ($ip) has left the room.");
 		}
 	}
+
+	unset($Authentication[$clientID]);
 }
 
 // start the server
