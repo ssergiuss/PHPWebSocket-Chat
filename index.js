@@ -36,7 +36,6 @@ function authenticate(message) {
             var n = Authentication.n;
 
             var r = Math.round(Math.random() * (n - 1));
-            // var x = ((Math.round(Math.random() * 1) ? -1 : 1) * r * r) % n;
             var x = (r * r) % n;
 
             Authentication.r = r;
