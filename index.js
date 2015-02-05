@@ -20,35 +20,56 @@ function isAuthenticated() {
 }
 
 function authenticate(message) {
+    var me = this,
+        privateKeysFetched = false,
+        publicKeysFetched = false;
+
     if (undefined === Authentication.status) {
         Authentication.status = 0;
     }
 
     if (0 === Authentication.status) {
+        var callback = function () {
+            $('#private-key-form-group').hide();
+            $('#public-key-form-group').hide();
+
+            var n = Authentication.n;
+
+            var r = Math.round(Math.random() * (n - 1));
+            // var x = ((Math.round(Math.random() * 1) ? -1 : 1) * r * r) % n;
+            var x = (r * r) % n;
+
+            Authentication.r = r;
+            Authentication.x = x;
+
+            send(JSON.stringify({
+                username: Authentication.username,
+                x       : Authentication.x
+            }));
+
+            Authentication.status = 1;
+        };
+
         readPrivateKeys(function (privateKeys) {
             Authentication.privateKeys = privateKeys;
 
-            readPublicKeys(function (publicKeys) {
-                Authentication.username = publicKeys[0];
-                Authentication.n = publicKeys[1];
-                Authentication.publicKeys = publicKeys.slice(2);
+            if (true === publicKeysFetched) {
+                callback.call(me);
+            } else {
+                privateKeysFetched = true;
+            }
+        });
 
-                var n = Authentication.n;
+        readPublicKeys(function (publicKeys) {
+            Authentication.username = publicKeys[0];
+            Authentication.n = publicKeys[1];
+            Authentication.publicKeys = publicKeys.slice(2);
 
-                var r = Math.round(Math.random() * (n - 1));
-                // var x = ((Math.round(Math.random() * 1) ? -1 : 1) * r * r) % n;
-                var x = (r * r) % n;
-
-                Authentication.r = r;
-                Authentication.x = x;
-
-                send(JSON.stringify({
-                    username: Authentication.username,
-                    x       : Authentication.x
-                }));
-
-                Authentication.status = 1;
-            });
+            if (true === privateKeysFetched) {
+                callback.call(me);
+            } else {
+                publicKeysFetched = true;
+            }
         });
     } else if (1 === Authentication.status) {
         Authentication.b = JSON.parse(message);
@@ -71,6 +92,8 @@ function authenticate(message) {
     } else if (2 === Authentication.status) {
         Authentication.status = 3;
         log('Authenticated.');
+
+        $('#message').show();
     }
 }
 
@@ -135,6 +158,8 @@ $(document).ready(function () {
     });
 
     Server.bind('close', function (data) {
+        console.log(data);
+
         log('Disconnected.');
     });
 

@@ -1,13 +1,14 @@
 <?php
+
 // prevent the server from timing out
 set_time_limit(0);
 
-// include the web sockets server script (the server is started at the far bottom of this file)
 require 'class.PHPWebSocket.php';
 
 $Authentication = array();
 
-function isAuthenticated($clientID) {
+function isAuthenticated($clientID)
+{
 	global $Authentication;
 
 	if (!isset($Authentication[$clientID])) {
@@ -17,9 +18,30 @@ function isAuthenticated($clientID) {
 	return $Authentication[$clientID]['status'] == 2;
 }
 
-function authenticate($clientID, $message) {
+function isAuthenticatedByUsername($username, $clientID)
+{
 	global $Server;
 	global $Authentication;
+
+	foreach ($Server->wsClients as $id => $client) {
+		if ($id !== $clientID
+			&& isset($Authentication[$id])
+			&& $username === $Authentication[$id]['username']
+			&& isAuthenticated($id)
+		) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function authenticate($clientID, $message)
+{
+	global $Server;
+	global $Authentication;
+
+	$ip = long2ip($Server->wsClients[$clientID][6]);
 
 	if (!isset($Authentication[$clientID])) {
 		$Authentication[$clientID] = array(
@@ -33,7 +55,20 @@ function authenticate($clientID, $message) {
 		$Authentication[$clientID]['username'] = $obj->username;
 		$Authentication[$clientID]['x'] = $obj->x;
 
+		if (isAuthenticatedByUsername($Authentication[$clientID]['username'], $clientID)) {
+			$username = $Authentication[$clientID]['username'];
+			$Server->log("Client \"$username\" already connected.");
+			$Server->wsClose($clientID);
+		}
+
 		$publicKeys = getPublicKeys($Authentication[$clientID]['username']);
+
+		if (null === $publicKeys) {
+			$username = $Authentication[$clientID]['username'];
+			$Server->log("No public key found for client \"$username\".");
+			$Server->wsClose($clientID);
+		}
+
 		$Authentication[$clientID]['n'] = $publicKeys['n'];
 		$Authentication[$clientID]['publicKeys'] = $publicKeys['keys'];
 
@@ -49,6 +84,12 @@ function authenticate($clientID, $message) {
 		$obj = json_decode($message);
 
 		$Authentication[$clientID]['y'] = $obj->y;
+
+		if (isAuthenticatedByUsername($Authentication[$clientID]['username'], $clientID)) {
+			$username = $Authentication[$clientID]['username'];
+			$Server->log("Client \"$username\" already connected.");
+			$Server->wsClose($clientID);
+		}
 
 		$n = $Authentication[$clientID]['n'];
 		$y = $Authentication[$clientID]['y'];
@@ -70,13 +111,26 @@ function authenticate($clientID, $message) {
 			)));
 
 			$Authentication[$clientID]['status'] = 2;
+
+			$username = $Authentication[$clientID]['username'];
+
+			$Server->log("Authentication for client \"$username\" succeeded.");
+
+			foreach ($Server->wsClients as $id => $client) {
+				if ($id != $clientID) {
+					$Server->wsSend($id, "$username ($ip) has joined the room.");
+				}
+			}
 		} else {
+			$username = $Authentication[$clientID]['username'];
+			$Server->log("Authentication for client \"$username\" failed.");
 			$Server->wsClose($clientID);
 		}
 	}
 }
 
-function getPublicKeys($username) {
+function getPublicKeys($username)
+{
 	$mysqli = new mysqli('localhost', 'root', '1234', 'websocket_chat');
 
 	if (mysqli_connect_errno()) {
@@ -95,7 +149,7 @@ function getPublicKeys($username) {
     	return null;
     } else {
     	$publicKeys = array(
-    		'n' => $row['n'],
+    		'n'    => $row['n'],
     		'keys' => explode(' ', $row['keys'])
 		);
     }
@@ -103,15 +157,14 @@ function getPublicKeys($username) {
     return $publicKeys;
 }
 
-// when a client sends data to the server
-function wsOnMessage($clientID, $message, $messageLength, $binary) {
+function wsOnMessage($clientID, $message, $messageLength, $binary)
+{
 	global $Server;
 	global $Authentication;
 
 	$ip = long2ip($Server->wsClients[$clientID][6]);
 
-	// check if message length is 0
-	if ($messageLength == 0) {
+	if (0 == $messageLength) {
 		$Server->wsClose($clientID);
 		return;
 	}
@@ -119,45 +172,45 @@ function wsOnMessage($clientID, $message, $messageLength, $binary) {
 	if (!isAuthenticated($clientID)) {
 		authenticate($clientID, $message);
 	} else {
-		//The speaker is the only person in the room. Don't let them feel lonely.
-		if ( sizeof($Server->wsClients) == 1 )
+		$username = $Authentication[$clientID]['username'];
+
+		if (sizeof($Server->wsClients) == 1) {
 			$Server->wsSend($clientID, "There isn't anyone else in the room, but I'll still listen to you. --Your Trusty Server");
-		else
-			//Send the message to everyone but the person who said it
-			foreach ( $Server->wsClients as $id => $client )
-				if ( $id != $clientID )
-					$Server->wsSend($id, "Visitor $clientID ($ip) said \"$message\"");
+		} else {
+			foreach ($Server->wsClients as $id => $client) {
+				if ($id != $clientID) {
+					$Server->wsSend($id, "$username ($ip) said \"$message\"");
+				}
+			}
+		}
 	}
 }
 
-// when a client connects
 function wsOnOpen($clientID)
 {
 	global $Server;
-	$ip = long2ip( $Server->wsClients[$clientID][6] );
+	$ip = long2ip($Server->wsClients[$clientID][6]);
 
-	$Server->log( "$ip ($clientID) has connected." );
-
-	//Send a join notice to everyone but the person who joined
-	foreach ( $Server->wsClients as $id => $client )
-		if ( $id != $clientID )
-			$Server->wsSend($id, "Visitor $clientID ($ip) has joined the room.");
+	$Server->log("$ip ($clientID) has connected.");
 }
 
-// when a client closes or lost connection
-function wsOnClose($clientID, $status) {
+function wsOnClose($clientID, $status)
+{
 	global $Server;
 	global $Authentication;
 
+	$ip = long2ip($Server->wsClients[$clientID][6]);
+	$username = $Authentication[$clientID]['username'];
+
 	unset($Authentication[$clientID]);
 
-	$ip = long2ip( $Server->wsClients[$clientID][6] );
+	$Server->log("$ip ($clientID) has disconnected.");
 
-	$Server->log( "$ip ($clientID) has disconnected." );
-
-	//Send a user left notice to everyone in the room
-	foreach ( $Server->wsClients as $id => $client )
-		$Server->wsSend($id, "Visitor $clientID ($ip) has left the room.");
+	if (isAuthenticated($clientID)) {
+		foreach ($Server->wsClients as $id => $client) {
+			$Server->wsSend($id, "$username ($ip) has left the room.");
+		}
+	}
 }
 
 // start the server
@@ -165,8 +218,6 @@ $Server = new PHPWebSocket();
 $Server->bind('message', 'wsOnMessage');
 $Server->bind('open', 'wsOnOpen');
 $Server->bind('close', 'wsOnClose');
-// for other computers to connect, you will probably need to change this to your LAN IP or external IP,
-// alternatively use: gethostbyaddr(gethostbyname($_SERVER['SERVER_NAME']))
 $Server->wsStartServer('127.0.0.1', 9300);
 
 ?>
